@@ -388,37 +388,58 @@ class DataProcessor:
     ):
 
         static_keys = ["STUDYID", "USUBJID", "APID", "POOLID", "SPDEVID"]
-        qnam_list = right_dataset["QNAM"].unique()
-        right_dataset = DataProcessor.process_supp(right_dataset)
-        dynamic_key = right_dataset["IDVAR"].iloc[0]
+        idvars = right_dataset["IDVAR"].unique()
 
-        # Determine the common keys present in both datasets
-        common_keys = [
-            key
-            for key in static_keys
-            if key in left_dataset.columns and key in right_dataset.columns
-        ]
-        common_keys.append(dynamic_key)
-        current_supp = right_dataset.rename(columns={"IDVARVAL": dynamic_key})
-        current_supp = current_supp.drop(columns=["IDVAR"])
-        left_dataset[dynamic_key] = left_dataset[dynamic_key].astype(str)
-        current_supp[dynamic_key] = current_supp[dynamic_key].astype(str)
-        left_dataset = PandasDataset(
-            pd.merge(
-                left_dataset.data,
-                current_supp.data,
-                how="left",
-                on=common_keys,
-                suffixes=("", "_supp"),
+        for dynamic_key in idvars:
+            current_supp = right_dataset.__class__(
+                right_dataset.data[right_dataset["IDVAR"] == dynamic_key]
             )
-        )
-        for qnam in qnam_list:
-            qnam_check = left_dataset.data.dropna(subset=[qnam])
-            grouped = qnam_check.groupby(common_keys).size()
-            if (grouped > 1).any():
-                raise ValueError(
-                    f"Multiple records with the same QNAM '{qnam}' match a single parent record"
+            qnam_list = current_supp["QNAM"].unique()
+            current_supp = DataProcessor.process_supp(current_supp)
+
+            common_keys = [
+                key
+                for key in static_keys
+                if key in left_dataset.columns and key in current_supp.columns
+            ]
+            common_keys.append(dynamic_key)
+
+            current_supp = current_supp.rename(columns={"IDVARVAL": dynamic_key})
+            current_supp = current_supp.drop(columns=["IDVAR"])
+
+            if dynamic_key in left_dataset.columns:
+                left_dataset[dynamic_key] = left_dataset[dynamic_key].astype(str)
+            current_supp[dynamic_key] = current_supp[dynamic_key].astype(str)
+
+            left_dataset = PandasDataset(
+                pd.merge(
+                    left_dataset.data,
+                    current_supp.data,
+                    how="left",
+                    on=common_keys,
+                    suffixes=("", "_supp"),
                 )
+            )
+
+            for qnam in qnam_list:
+                supp_column = f"{qnam}_supp"
+                if supp_column in left_dataset.columns:
+                    if qnam in left_dataset.columns:
+                        left_dataset[qnam] = left_dataset[qnam].combine_first(
+                            left_dataset[supp_column]
+                        )
+                        left_dataset = left_dataset.drop(columns=[supp_column])
+                    else:
+                        left_dataset = left_dataset.rename(
+                            columns={supp_column: qnam}
+                        )
+
+                qnam_check = left_dataset.data.dropna(subset=[qnam])
+                grouped = qnam_check.groupby(common_keys).size()
+                if (grouped > 1).any():
+                    raise ValueError(
+                        f"Multiple records with the same QNAM '{qnam}' match a single parent record"
+                    )
         if dataset_implementation == DaskDataset:
             left_dataset = DaskDataset(left_dataset.data)
         return left_dataset

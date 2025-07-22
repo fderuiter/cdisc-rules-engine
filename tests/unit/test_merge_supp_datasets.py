@@ -123,3 +123,65 @@ def test_merge_pivot_supp_dataset(
     )
     assert len(merged_dataset.data) == len(parent_dataset.data), "The"
     " length of the merged dataset should match the parent dataset."
+
+
+@patch.object(LocalDataService, "check_filepath", return_value=False)
+@patch.object(LocalDataService, "_async_get_datasets")
+def test_merge_pivot_supp_dataset_multiple_idvar(
+    mock_async_get_datasets, mock_check_filepath, data_service
+):
+    parent_dataset = PandasDataset(
+        pd.DataFrame(
+            {
+                "STUDYID": [1, 2, 3, 4],
+                "USUBJID": [101, 102, 103, 104],
+                "APID": [201, 202, 203, 204],
+                "POOLID": [301, 302, 303, 304],
+                "SPDEVID": [401, 402, 403, 404],
+                "A": ["1", "2", "3", "4"],
+                "B": ["10", "20", "30", "40"],
+            }
+        )
+    )
+
+    supp_dataset = PandasDataset(
+        pd.DataFrame(
+            {
+                "STUDYID": [1, 2, 3, 4],
+                "USUBJID": [101, 102, 103, 104],
+                "APID": [201, 202, 203, 204],
+                "POOLID": [301, 302, 303, 304],
+                "SPDEVID": [401, 402, 403, 404],
+                "IDVAR": ["A", "A", "B", "B"],
+                "IDVARVAL": ["1", "2", "30", "40"],
+                "QNAM": ["X", "X", "Y", "Y"],
+                "QVAL": [100, 200, 300, 400],
+                "QLABEL": ["L1", "L2", "L3", "L4"],
+            }
+        )
+    )
+
+    merged_dataset = DataProcessor.merge_pivot_supp_dataset(
+        data_service.dataset_implementation, parent_dataset, supp_dataset
+    )
+
+    expected_dataset = PandasDataset(
+        pd.DataFrame(
+            {
+                "STUDYID": [1, 2, 3, 4],
+                "USUBJID": [101, 102, 103, 104],
+                "APID": [201, 202, 203, 204],
+                "POOLID": [301, 302, 303, 304],
+                "SPDEVID": [401, 402, 403, 404],
+                "A": ["1", "2", "3", "4"],
+                "B": ["10", "20", "30", "40"],
+                "X": [100, 200, pd.NA, pd.NA],
+                "Y": [pd.NA, pd.NA, 300, 400],
+            }
+        )
+    )
+
+    pdt.assert_frame_equal(
+        merged_dataset.data, expected_dataset.data, check_dtype=False
+    )
+    assert len(merged_dataset.data) == len(parent_dataset.data)
