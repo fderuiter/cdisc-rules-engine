@@ -724,6 +724,18 @@ def test_validate():
         sys.exit(1)
 
 
+@click.command()
+def gui():
+    """Launches the GUI for the CDISC Rules Engine."""
+    import tkinter as tk
+    from gui import ValidationApp
+
+    root = tk.Tk()
+    app = ValidationApp(root)
+    root.mainloop()
+
+
+cli.add_command(gui)
 cli.add_command(test_validate)
 cli.add_command(validate)
 cli.add_command(update_cache)
